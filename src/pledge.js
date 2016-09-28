@@ -7,15 +7,12 @@ function $Promise () {
 	this._state = "pending";
 	this._value;
 	this._handlerGroups = [];
-	//this._queue = [];
-
 
 	}
-
 $Promise.prototype.then =function(success, error) {
-		var successCb;
-		var errorCb; 
-		
+	var successCb;
+	var errorCb; 
+
 		if(typeof success === 'function') {
 			 successCb = success;
 		} else {
@@ -27,25 +24,40 @@ $Promise.prototype.then =function(success, error) {
 		} else {
 			 errorCb = false;
 		}
-
-		this._handlerGroups.push({"successCb": successCb, "errorCb": errorCb})
+		var downstream = new Deferral();
+		var group = {"successCb": successCb, "errorCb": errorCb, "downstream": downstream};
+		this._handlerGroups.push(group);
+		// console.log(this._handlerGroups);	
 		var item = this._handlerGroups.length-1;
 		this.callHandlers(item)
-		console.log("handler groups", this._handlerGroups);
+
+		return this._handlerGroups[item].downstream.$promise;
+}
+
+$Promise.prototype.catch = function(errorFn) {
+	return this.then(null, errorFn);
 }
 
 
 $Promise.prototype.callHandlers = function(item) {
+	//for group in handlerGroup
+	/*
+		promiseB = group.defer
+		this = promiseA
+		if this.state=resolved then promiseB.resolve(this.value)
+		or promiseB.reject(this.value)
+	*/
 		if(this._state === "resolved") {
-			this._handlerGroups[item].successCb(this._value)	
+			this._handlerGroups[item].successCb(this._value);	
 		}
-
-		//if not resolved, wait to be resolved, then invoke. 
-		//
-
-		//  else {
-		// // 	this._handlerGroups[item].errorCb;	
-		// // }
+		 else if (this._state === "rejected"){
+			if (this._handlerGroups[item].errorCb) {
+				this._handlerGroups[item].errorCb(this._value);	
+			}
+		}
+		
+			//this._handlerGroups[item].errorCb();
+		
    		
 }
 
@@ -59,13 +71,14 @@ Deferral.prototype.resolve = function(value) {
 		this.$promise._value = value;
 
 		if(this.$promise._handlerGroups.length) {
-			// var item = this.$promise._handlerGroups.le;
+			console.log("handler groups in resolve: " , this.$promise._handlerGroups)
 			this.$promise._handlerGroups.forEach((obj) => {
 				obj.successCb(this.$promise._value)
 			})
 		}
 		
 	}
+	this.$promise._handlerGroups = [];
 }
 
 function defer() {
@@ -78,7 +91,14 @@ Deferral.prototype.reject = function(reason) {
 	if (this.$promise._state === "pending") {
 		this.$promise._state = "rejected";
 		this.$promise._value = reason;
+	
+		if(this.$promise._handlerGroups.length) {
+				this.$promise._handlerGroups.forEach((obj) => {
+					obj.errorCb(this.$promise._value)
+				})
+			}
 	}
+	this.$promise._handlerGroups = [];
 }
 
 
